@@ -74,4 +74,4 @@ Debug APKs install fine. For a signed release build:
 
 - **Permission denied loop:** tap the title to retry, or enable Music and audio under Settings > Apps > Player > Permissions.
 - **Gradle fails with Java errors:** make sure JDK 17 is the active Java.
-- **Blank screen:** run `npm run www` before `npx cap sync android`. `www/` must contain `index.html` and `three.module.min.js`.
+- **Blank screen:** run `npm run www` before `npx cap sync android`. `www/` must contain `index.html` and `three.module.js`.

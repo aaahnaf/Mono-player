@@ -39,8 +39,33 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # No android-actions/setup-android here on purpose. That action was the
+      # thing failing: with its default cmdline-tools-version (12266719 =
+      # cmdline-tools;16.0) it decides the preinstalled sdkmanager is the wrong
+      # version, installs 16.0 into $ANDROID_HOME/cmdline-tools/16.0 and then
+      # runs `sdkmanager tools platform-tools` from it -- but recent
+      # command-line tools releases no longer publish the legacy 'tools'
+      # package, so every run ended with
+      # "Warning: Failed to find package 'tools'" and exit code 1.
+      #
+      # The runner image already ships everything this build needs (platforms,
+      # build-tools, platform-tools), so we only point Gradle at it. Gradle
+      # finds an SDK through ANDROID_HOME/ANDROID_SDK_ROOT or local.properties,
+      # so we write local.properties from whichever variable is set.
+      - name: Point Gradle at the preinstalled Android SDK
+        run: |
+          sdk="${ANDROID_HOME:-}"
+          [ -n "$sdk" ] || sdk="${ANDROID_SDK_ROOT:-}"
+          [ -n "$sdk" ] || sdk=/usr/local/lib/android/sdk
+          if [ ! -d "$sdk" ]; then
+            echo "No Android SDK found at $sdk" >&2
+            exit 1
+          fi
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "sdk.dir=$sdk" > android/local.properties
+          echo "Using Android SDK at $sdk:"
+          ls "$sdk"
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
@@ -48,6 +73,22 @@ jobs:
       - name: Assemble debug APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+
+      # If the build still fails, dump what the runner actually has so the next
+      # run needs no guessing.
+      - name: Show SDK state on failure
+        if: failure()
+        run: |
+          echo "::group::Android SDK contents"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}" || true
+          for d in platforms build-tools platform-tools cmdline-tools; do
+            echo "--- $d ---"
+            ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/$d" 2>/dev/null || true
+          done
+          echo "::endgroup::"
+          echo "::group::local.properties"
+          cat android/local.properties || true
+          echo "::endgroup::"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

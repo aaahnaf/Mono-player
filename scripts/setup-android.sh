@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Creates the Android project (once) and wires in the native music plugin.
 set -e
-[ -d android ] || npx cap add android
+[ -d www ] || npm run www
+[ -d android ] || npx --yes @capacitor/cli@6 add android
 D=android/app/src/main/java/com/example/player
 mkdir -p "$D"
 cp native/MusicLibraryPlugin.java "$D/"

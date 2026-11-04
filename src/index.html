@@ -70,9 +70,10 @@ svg{display:block;fill:none;stroke:#fff;stroke-width:1.2;stroke-linecap:square}
 <aside id="sheet"><div class="grab" id="grab"></div><input id="q" placeholder="Search" autocomplete="off"><div id="list"></div>
  <input id="file" type="file" accept="audio/*" multiple hidden></aside>
 <script type="module">
-import * as THREE from './three.module.min.js';
-const $=s=>document.querySelector(s),Cap=window.Capacitor,native=!!Cap?.isNativePlatform?.();
-const ML=native?Cap.registerPlugin('MusicLibrary'):null;
+import * as THREE from './three.module.js';
+const $=s=>document.querySelector(s),Cap=window.Capacitor,native=!!(Cap&&(Cap.isNativePlatform?.()||Cap.platform));
+const ML=native&&Cap.registerPlugin?Cap.registerPlugin('MusicLibrary'):null;
+if(native&&!ML)console.warn('Capacitor bridge found but registerPlugin is missing — update @capacitor/core.');
 const au=new Audio();let T=[],i=-1,shuf=false,rep=false,ctx,an,fq,kick=0,drag=0;
 const fmt=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00',pad=n=>String(n).padStart(2,'0');
 const arts=new Map();
@@ -81,7 +82,7 @@ const io=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return
 function render(q=''){const L=$('#list');L.innerHTML='';const s=q.toLowerCase();
  T.forEach((t,n)=>{if(s&&!(t.title+t.artist+t.album).toLowerCase().includes(s))return;const r=document.createElement('div');r.className='row'+(n==i?' cur':'');r.dataset.n=n;
   r.innerHTML='<em>'+pad(n+1)+'</em><img alt=""><div><p></p><small></small></div>';r.querySelector('p').textContent=t.title;r.querySelector('small').textContent=t.artist+(t.album?' – '+t.album:'');
-  r.onclick=()=>{load(n,true);sheet(false)};L.append(r);io.observe(r)});
+  r.onclick=()=>{load(n,true);closeSheet()};L.append(r);io.observe(r)});
  if(!native){const b=document.createElement('button');b.id='add';b.textContent='Add music';b.onclick=()=>$('#file').click();L.append(b)}}
 function initAudio(){if(an)return;try{ctx=new(window.AudioContext||webkitAudioContext)();const s=ctx.createMediaElementSource(au);an=ctx.createAnalyser();an.fftSize=256;an.smoothingTimeConstant=.8;s.connect(an);an.connect(ctx.destination);fq=new Uint8Array(an.frequencyBinCount)}catch(e){an=null}}
 async function load(n,play){if(!T.length)return;i=(n+T.length)%T.length;const mine=i,t=T[i];au.src=t.src;kick=1;
@@ -102,15 +103,17 @@ $('#sh').onclick=e=>e.currentTarget.classList.toggle('on',shuf=!shuf);
 $('#rp').onclick=e=>e.currentTarget.classList.toggle('on',rep=!rep);
 const bar=$('#bar'),seek=e=>{const r=bar.getBoundingClientRect(),p=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));if(au.duration)au.currentTime=p*au.duration};
 bar.onpointerdown=e=>{drag=1;bar.classList.add('on');bar.setPointerCapture(e.pointerId);seek(e)};bar.onpointermove=e=>drag&&seek(e);bar.onpointerup=()=>{drag=0;bar.classList.remove('on')};
-const sheet=o=>{$('#sheet').classList.toggle('open',o);$('#shade').classList.toggle('on',o)};
-$('#open').onclick=()=>sheet(true);$('#shade').onclick=()=>sheet(false);$('#q').oninput=e=>render(e.target.value);
+const openSheet=()=>{$('#sheet').classList.add('open');$('#shade').classList.add('on')};
+const closeSheet=()=>{$('#sheet').classList.remove('open');$('#shade').classList.remove('on')};
+$('#open').onclick=openSheet;$('#shade').onclick=closeSheet;$('#q').oninput=e=>render(e.target.value);
 let y0=0;document.addEventListener('touchstart',e=>y0=e.touches[0].clientY,{passive:true});
-document.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientY-y0;if(d<-80&&!e.target.closest('#sheet'))sheet(true);if(d>80&&e.target.closest('#grab'))sheet(false)},{passive:true});
+document.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientY-y0;if(d<-80&&!e.target.closest('#sheet'))openSheet();if(d>80&&e.target.closest('#grab'))closeSheet()},{passive:true});
 function ready(){render();load(0,false)}
-async function scan(){try{const r=await ML.getTracks();T=r.tracks.map(o=>({...o,aid:o.albumId,src:Cap.convertFileSrc(o.path),artist:o.artist&&o.artist!='<unknown>'?o.artist:'Unknown artist',album:o.album&&o.album!='<unknown>'?o.album:''}));
+async function scan(){if(!ML){$('#title').textContent='Plugin missing';$('#sub').textContent='Run npm run android to add it';return}
+ try{const r=await ML.getTracks();T=(r.tracks||[]).map(o=>({...o,aid:o.albumId,src:Cap.convertFileSrc(o.path),artist:o.artist&&o.artist!='<unknown>'?o.artist:'Unknown artist',album:o.album&&o.album!='<unknown>'?o.album:''}));
  if(T.length)ready();else{$('#title').textContent='No music found';$('#sub').textContent='Add MP3 files to your phone'}}
  catch(e){$('#title').textContent='Allow access';$('#sub').textContent='Tap here to retry'}}
-$('#file').onchange=e=>{T=[...e.target.files].map((f,n)=>({title:f.name.replace(/\.[^.]+$/,''),artist:'Local file',album:'',aid:'f'+n,src:URL.createObjectURL(f)}));ready();sheet(false)};
+$('#file').onchange=e=>{T=[...e.target.files].map((f,n)=>({title:f.name.replace(/\.[^.]+$/,''),artist:'Local file',album:'',aid:'f'+n,src:URL.createObjectURL(f)}));ready();closeSheet()};
 $('#title').onclick=()=>{if(T.length)return;native?scan():$('#file').click()};
 if(native)scan();else{$('#title').textContent='Add music';$('#sub').textContent='Tap here to choose files';render()}
 

@@ -44,24 +44,30 @@ public class MusicLibraryPlugin extends Plugin {
     String[] cols = {
       MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
       MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
-      MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA
+      MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA,
+      MediaStore.Audio.Media.MIME_TYPE
     };
     // MP3 only. Remove the MIME clause to include every music format.
     String sel = MediaStore.Audio.Media.IS_MUSIC + "!=0 AND " + MediaStore.Audio.Media.MIME_TYPE + "='audio/mpeg'";
     try (Cursor q = getContext().getContentResolver().query(
         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols, sel, null,
         MediaStore.Audio.Media.TITLE + " COLLATE NOCASE ASC")) {
-      while (q != null && q.moveToNext()) {
-        JSObject o = new JSObject();
-        o.put("id", q.getLong(0));
-        o.put("title", q.getString(1));
-        o.put("artist", q.getString(2));
-        o.put("album", q.getString(3));
-        o.put("albumId", q.getLong(4));
-        o.put("duration", q.getLong(5));
-        o.put("path", q.getString(6));
-        out.put(o);
+      if (q != null) {
+        while (q.moveToNext()) {
+          JSObject o = new JSObject();
+          o.put("id", q.getLong(0));
+          o.put("title", q.isNull(1) ? "Unknown title" : q.getString(1));
+          o.put("artist", q.isNull(2) ? "<unknown>" : q.getString(2));
+          o.put("album", q.isNull(3) ? "<unknown>" : q.getString(3));
+          o.put("albumId", q.getLong(4));
+          o.put("duration", q.getLong(5));
+          o.put("path", q.isNull(6) ? "" : q.getString(6));
+          out.put(o);
+        }
       }
+    } catch (Exception e) {
+      call.reject("MediaStore query failed: " + e.getMessage());
+      return;
     }
     JSObject res = new JSObject();
     res.put("tracks", out);
@@ -74,7 +80,7 @@ public class MusicLibraryPlugin extends Plugin {
     String albumId = call.getString("albumId", "0");
     File f = new File(getContext().getCacheDir(), "art_" + albumId + ".jpg");
     JSObject res = new JSObject();
-    if (!f.exists() && path != null) {
+    if (!f.exists() && path != null && !path.isEmpty()) {
       MediaMetadataRetriever m = new MediaMetadataRetriever();
       try {
         m.setDataSource(path);
@@ -87,5 +93,12 @@ public class MusicLibraryPlugin extends Plugin {
     }
     res.put("path", f.exists() ? f.getAbsolutePath() : "");
     call.resolve(res);
+  }
+
+  @Override
+  protected void handleOnDestroy() {
+    // Clear the artwork cache so it does not grow without bound.
+    File[] files = getContext().getCacheDir().listFiles();
+    if (files != null) for (File f : files) if (f.getName().startsWith("art_")) f.delete();
   }
 }

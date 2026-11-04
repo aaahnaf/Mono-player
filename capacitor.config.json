@@ -2,5 +2,11 @@
   "appId": "com.example.player",
   "appName": "Player",
   "webDir": "www",
-  "backgroundColor": "#000000"
+  "backgroundColor": "#000000",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
 }

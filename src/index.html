@@ -74,7 +74,7 @@ import * as THREE from './three.module.js';
 const $=s=>document.querySelector(s),Cap=window.Capacitor,native=!!(Cap&&(Cap.isNativePlatform?.()||Cap.platform));
 const ML=native&&Cap.registerPlugin?Cap.registerPlugin('MusicLibrary'):null;
 if(native&&!ML)console.warn('Capacitor bridge found but registerPlugin is missing — update @capacitor/core.');
-const au=new Audio();let T=[],i=-1,shuf=false,rep=false,ctx,an,fq,kick=0,drag=0;
+const au=new Audio();au.preload='auto';let T=[],i=-1,shuf=false,rep=false,ctx,an,fq,kick=0,drag=0,gen=0;
 const fmt=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00',pad=n=>String(n).padStart(2,'0');
 const arts=new Map();
 const art=t=>{if(!arts.has(t.aid))arts.set(t.aid,(async()=>{try{if(t.cover)return t.cover;if(ML){const r=await ML.getArt({path:t.path,albumId:String(t.aid)});if(r.path)return Cap.convertFileSrc(r.path)}}catch(e){}return''})());return arts.get(t.aid)};
@@ -85,15 +85,15 @@ function render(q=''){const L=$('#list');L.innerHTML='';const s=q.toLowerCase();
   r.onclick=()=>{load(n,true);closeSheet()};L.append(r);io.observe(r)});
  if(!native){const b=document.createElement('button');b.id='add';b.textContent='Add music';b.onclick=()=>$('#file').click();L.append(b)}}
 function initAudio(){if(an)return;try{ctx=new(window.AudioContext||webkitAudioContext)();const s=ctx.createMediaElementSource(au);an=ctx.createAnalyser();an.fftSize=256;an.smoothingTimeConstant=.8;s.connect(an);an.connect(ctx.destination);fq=new Uint8Array(an.frequencyBinCount)}catch(e){an=null}}
-async function load(n,play){if(!T.length)return;i=(n+T.length)%T.length;const mine=i,t=T[i];au.src=t.src;kick=1;
+async function load(n,play){if(!T.length)return;i=((n%T.length)+T.length)%T.length;const mine=++gen,t=T[i];au.src=t.src;kick=1;
  document.querySelectorAll('.row').forEach(r=>r.classList.toggle('cur',+r.dataset.n==i));
  $('#idx').textContent=pad(i+1)+' / '+pad(T.length);
  for(const s of['#title','#sub']){const e=$(s);e.classList.remove('rise');void e.offsetWidth;e.classList.add('rise')}
  $('#title').textContent=t.title;$('#sub').textContent=t.artist+(t.album?'  –  '+t.album:'');
  const c=$('#cover');c.classList.add('out');
  if(play){initAudio();ctx&&ctx.resume();au.play().catch(()=>{})}
- const u=await art(t);if(mine!=i)return;
- setTimeout(()=>{if(mine!=i)return;if(u){c.src=u;c.classList.remove('none')}else c.classList.add('none');c.classList.remove('out')},380)}
+ const u=await art(t);if(mine!=gen)return;
+ setTimeout(()=>{if(mine!=gen)return;if(u){c.src=u;c.classList.remove('none')}else c.classList.add('none');c.classList.remove('out')},380)}
 const nx=()=>load(shuf?Math.random()*T.length|0:i+1,true),pv=()=>au.currentTime>3?au.currentTime=0:load(i-1,true);
 const icon=()=>$('#ico').setAttribute('d',au.paused?'M8 5l11 7-11 7z':'M8 5v14M16 5v14');
 au.onplay=au.onpause=icon;au.onended=()=>rep?(au.currentTime=0,au.play()):nx();
@@ -110,11 +110,14 @@ let y0=0;document.addEventListener('touchstart',e=>y0=e.touches[0].clientY,{pass
 document.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientY-y0;if(d<-80&&!e.target.closest('#sheet'))openSheet();if(d>80&&e.target.closest('#grab'))closeSheet()},{passive:true});
 function ready(){render();load(0,false)}
 async function scan(){if(!ML){$('#title').textContent='Plugin missing';$('#sub').textContent='Run npm run android to add it';return}
- try{const r=await ML.getTracks();T=(r.tracks||[]).map(o=>({...o,aid:o.albumId,src:Cap.convertFileSrc(o.path),artist:o.artist&&o.artist!='<unknown>'?o.artist:'Unknown artist',album:o.album&&o.album!='<unknown>'?o.album:''}));
- if(T.length)ready();else{$('#title').textContent='No music found';$('#sub').textContent='Add MP3 files to your phone'}}
- catch(e){$('#title').textContent='Allow access';$('#sub').textContent='Tap here to retry'}}
+ try{const r=await ML.getTracks();T=(r.tracks||[]).filter(o=>o&&o.id).map(o=>({...o,aid:o.albumId,src:'/_music/'+o.id,title:o.title&&o.title!='<unknown>'?o.title:'Unknown title',artist:o.artist&&o.artist!='<unknown>'?o.artist:'Unknown artist',album:o.album&&o.album!='<unknown>'?o.album:''}));
+ perm='';
+ if(T.length)ready();else{$('#title').textContent='No music found';$('#sub').textContent='Add MP3 files to your phone, then tap here to rescan'}}
+ catch(e){perm=e&&e.error==='permanently_denied'?'blocked':'denied';$('#title').textContent=perm==='blocked'?'Music access blocked':'Allow music access';$('#sub').textContent=perm==='blocked'?'Tap here to open app settings':'Tap here to retry'}}
 $('#file').onchange=e=>{T=[...e.target.files].map((f,n)=>({title:f.name.replace(/\.[^.]+$/,''),artist:'Local file',album:'',aid:'f'+n,src:URL.createObjectURL(f)}));ready();closeSheet()};
-$('#title').onclick=()=>{if(T.length)return;native?scan():$('#file').click()};
+$('#title').onclick=()=>{if(T.length)return;native?(perm==='blocked'?ML.openSettings():scan()):$('#file').click()};
+document.addEventListener('pause',()=>{ctx&&ctx.suspend().catch(()=>{})});
+document.addEventListener('resume',()=>{if(ctx&&ctx.state==='suspended')ctx.resume().catch(()=>{})});
 if(native)scan();else{$('#title').textContent='Add music';$('#sub').textContent='Tap here to choose files';render()}
 
 /* ---------- three.js ---------- */
